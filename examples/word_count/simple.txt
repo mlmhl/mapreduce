@@ -1,0 +1,2 @@
+This is a very simple and short test, just used to verify the word count program manually.
+Concretely, you can use this file to run the word count program, and check the output file through your eyes.
