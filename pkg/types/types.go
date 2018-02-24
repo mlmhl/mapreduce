@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+
+	"github.com/mlmhl/mapreduce/pkg/storage"
 )
 
 type Mode = string
@@ -70,19 +72,14 @@ type MRConfigOptions struct {
 	Storage    StorageType
 }
 
-type MetaData struct {
+type Job struct {
 	Name      string
 	Mapper    Mapper
 	Reducer   Reducer
 	Hasher    Hasher
 	MapNum    int
 	ReduceNum int
-}
-
-type Job struct {
-	MetaData
-	RootDir    string
-	InputFiles []string
+	Storage   storage.Storage
 }
 
 type TaskType string
@@ -122,6 +119,7 @@ const (
 	MapErr
 	ReduceErr
 	UnknownTask
+	ParallelLimitErr
 )
 
 type TasksStatus struct {

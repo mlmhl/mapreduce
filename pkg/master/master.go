@@ -3,29 +3,29 @@ package master
 import (
 	"fmt"
 
-	"github.com/mlmhl/mapreduce/pkg/storage"
 	"github.com/mlmhl/mapreduce/pkg/types"
 
 	"github.com/golang/glog"
+	"github.com/mlmhl/mapreduce/pkg/util"
 )
 
-func New(job types.Job, mode types.Mode, storage storage.Storage) (*Master, error) {
-	if err := validate(job, mode); err != nil {
+func New(job types.Job, mode types.Mode, inputFiles []string) (*Master, error) {
+	if err := validate(job, mode, inputFiles); err != nil {
 		return nil, err
 	}
 	var scheduler scheduler
 	var taskManager taskManager
 	switch mode {
 	case types.Sequential:
-		taskManager = newSequentialTaskManager(job)
-		scheduler = newSequentialScheduler(job.MetaData, taskManager, storage)
+		taskManager = newSequentialTaskManager(job, inputFiles)
+		scheduler = newSequentialScheduler(job, taskManager, util.NewExecutorFactory())
 	}
 	return &Master{scheduler: scheduler, taskManager: taskManager, finishedChan: make(chan struct{})}, nil
 }
 
-func validate(job types.Job, mode types.Mode) error {
-	if job.MapNum != len(job.InputFiles) {
-		return fmt.Errorf("mismatch map number(%d) and input file number(%d)", job.MapNum, len(job.InputFiles))
+func validate(job types.Job, mode types.Mode, inputFiles []string) error {
+	if job.MapNum != len(inputFiles) {
+		return fmt.Errorf("mismatch map number(%d) and input file number(%d)", job.MapNum, len(inputFiles))
 	}
 	if !types.ValidaMode(mode) {
 		return fmt.Errorf("unsupported mode: %s", mode)
