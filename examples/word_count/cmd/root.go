@@ -26,18 +26,6 @@ var masterCmd = &cobra.Command{
 	Short: "Run as a master",
 	Long:  "start a master of the map reduce framework",
 	Run: func(cmd *cobra.Command, args []string) {
-		job := types.Job{
-			MetaData: types.MetaData{
-				Name:      args[0],
-				Mapper:    mapper{},
-				Reducer:   reducer{},
-				Hasher:    types.DefaultHasher(),
-				MapNum:    len(args[1:]),
-				ReduceNum: options.ReduceNum,
-			},
-			InputFiles: args[1:],
-		}
-
 		var s storage.Storage
 		switch options.Storage {
 		case types.LocalStorage:
@@ -48,7 +36,17 @@ var masterCmd = &cobra.Command{
 			return
 		}
 
-		m, err := master.New(job, options.Mode, s)
+		job := types.Job{
+			Name:      args[0],
+			Mapper:    mapper{},
+			Reducer:   reducer{},
+			Hasher:    types.DefaultHasher(),
+			MapNum:    len(args[1:]),
+			ReduceNum: options.ReduceNum,
+			Storage:   s,
+		}
+
+		m, err := master.New(job, options.Mode, args[1:])
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err.Error())
 			cmd.Usage()
