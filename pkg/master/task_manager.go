@@ -14,7 +14,7 @@ type taskManager interface {
 	Report(task types.Task, result types.Result)
 }
 
-func newGenericTaskManager(job types.Job, inputFiles []string) genericTaskManager {
+func newTaskManager(job types.Job, inputFiles []string) *genericTaskManager {
 	mapTasks := make([]types.Task, job.MapNum)
 	for i := 0; i < job.MapNum; i++ {
 		mapTasks[i] = types.Task{Type: types.Map, Index: i, FileName: inputFiles[i]}
@@ -24,7 +24,7 @@ func newGenericTaskManager(job types.Job, inputFiles []string) genericTaskManage
 		reduceTasks[i] = types.Task{Type: types.Reduce, Index: i}
 	}
 
-	return genericTaskManager{
+	return &genericTaskManager{
 		jobName:     job.Name,
 		mapTasks:    newTaskState(mapTasks),
 		reduceTasks: newTaskState(reduceTasks),
@@ -145,14 +145,4 @@ func (ts *tasksState) report(task types.Task, result types.Result) {
 	}
 
 	ts.cond.Broadcast()
-}
-
-func newSequentialTaskManager(job types.Job, inputFiles []string) taskManager {
-	return &sequentialTaskManager{
-		genericTaskManager: newGenericTaskManager(job, inputFiles),
-	}
-}
-
-type sequentialTaskManager struct {
-	genericTaskManager
 }
