@@ -5,8 +5,8 @@ import (
 	"net/rpc"
 )
 
-func NewServer(name string, receiver interface{}, network, address string) (*Server, error) {
-	listener, err := net.Listen(network, address)
+func NewServer(name string, address Address, receiver interface{}) (*Server, error) {
+	listener, err := net.Listen(address.Network, address.Address)
 	if err != nil {
 		return nil, err
 	}
@@ -14,16 +14,21 @@ func NewServer(name string, receiver interface{}, network, address string) (*Ser
 	if err = server.RegisterName(name, receiver); err != nil {
 		return nil, err
 	}
-	return &Server{server, listener}, nil
+	return &Server{address, server, listener}, nil
 }
 
 type Server struct {
+	address  Address
 	server   *rpc.Server
 	listener net.Listener
 }
 
 func (s *Server) Run() {
 	go s.server.Accept(s.listener)
+}
+
+func (s *Server) Address() Address {
+	return s.address
 }
 
 func (s *Server) Stop() error {

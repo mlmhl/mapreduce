@@ -18,14 +18,14 @@ func (r *TestReceiver) Set(value int, _ *NopValue) error {
 
 func TestRpc(t *testing.T) {
 	network, address := "tcp", "127.0.0.1:12345"
-	server, err := NewServer("Test", &TestReceiver{}, network, address)
+	server, err := NewServer("Test", Address{network, address}, &TestReceiver{})
 	if err != nil {
 		t.Fatalf("Create Server failed: %v", err)
 	}
 	server.Run()
 	defer server.Stop()
 
-	client, err := NewClient(network, address)
+	client, err := NewClient(Address{network, address})
 	if err != nil {
 		t.Fatalf("Create Client failed: %v", err)
 	}
