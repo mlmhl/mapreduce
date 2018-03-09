@@ -16,7 +16,7 @@ type Address struct {
 }
 
 func ParseAddress(str string) (Address, error) {
-	tags := strings.Split(str, ":")
+	tags := strings.SplitN(str, ":", 2)
 	if len(tags) != 2 {
 		return Address{}, fmt.Errorf("unknown address format: %s", str)
 	}

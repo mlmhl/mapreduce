@@ -24,6 +24,7 @@ type Server struct {
 }
 
 func (s *Server) Run() {
+	// TODO: Handle requests manually.
 	go s.server.Accept(s.listener)
 }
 
