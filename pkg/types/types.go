@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"hash/fnv"
 	"io"
+	"time"
 
+	"github.com/mlmhl/mapreduce/pkg/rpc"
 	"github.com/mlmhl/mapreduce/pkg/storage"
 )
 
@@ -62,14 +64,30 @@ const (
 	LocalStorage = "local"
 )
 
-type MRConfigOptions struct {
-	Mode       Mode
-	JobName    string
-	MapNum     int
-	ReduceNum  int
-	InputFiles []string
-	RootDir    string
-	Storage    StorageType
+type ConfigOptions struct {
+	// Common options.
+	JobName   string
+	RootDir   string
+	Address   string
+	ReduceNum int
+	Storage   StorageType
+
+	MasterConfigOptions
+	WorkerConfigOptions
+}
+
+type MasterConfigOptions struct {
+	Mode                 Mode
+	InputFiles           []string
+	WorkerTimeout        time.Duration
+	HealthyCheckInterval time.Duration
+}
+
+type WorkerConfigOptions struct {
+	MapNum                int
+	Limit                 int
+	MasterAddress         string
+	HealthyReportInterval time.Duration
 }
 
 type Job struct {
@@ -116,10 +134,12 @@ var SucceededResult = Result{Code: 0, Message: "Succeeded"}
 
 const (
 	FileIOErr = iota
+	RpcCallErr
 	MapErr
 	ReduceErr
 	UnknownTask
 	ParallelLimitErr
+	ExceptionErr
 )
 
 type TasksStatus struct {
@@ -133,4 +153,45 @@ type JobStatus struct {
 	Output       string      `json:"output,omitempty"`
 	MapStatus    TasksStatus `json:"mapStatus"`
 	ReduceStatus TasksStatus `json:"reduceStatus"`
+}
+
+type RegisterArg struct {
+	Name    string
+	Balance int
+	Address rpc.Address
+}
+
+type RegisterResult struct {
+	Result
+}
+
+type PingArg struct {
+	Name string
+}
+
+type WorkerStatus struct {
+	Name     string
+	Running  int
+	Failed   int
+	Finished int
+}
+
+type MasterConfiguration struct {
+	Job        Job
+	Mode       Mode
+	InputFiles []string
+
+	/*Parameters for parallel mode*/
+	Address       rpc.Address
+	WorkerTimeout time.Duration
+	CheckInterval time.Duration
+}
+
+type WorkerConfiguration struct {
+	Job                   Job
+	Name                  string
+	Limit                 int
+	Address               rpc.Address
+	MasterAddress         rpc.Address
+	HealthyReportInterval time.Duration
 }
