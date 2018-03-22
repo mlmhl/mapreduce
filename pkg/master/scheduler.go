@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/golang/glog"
 	"github.com/mlmhl/mapreduce/pkg/types"
 	"github.com/mlmhl/mapreduce/pkg/util"
 )
@@ -13,50 +14,19 @@ type scheduler interface {
 	Run() (string, error)
 }
 
-type schedulerImpl interface {
-	runOne(task types.Task) types.Result
-}
-
-func newGenericScheduler(job types.Job, manager taskManager) genericScheduler {
-	return genericScheduler{
-		job:     job,
-		manager: manager,
-	}
-}
-
-type genericScheduler struct {
-	impl schedulerImpl
-
-	job        types.Job
-	inputFiles []string
-	manager    taskManager
-}
-
-func (s *genericScheduler) Run() (string, error) {
-	for {
-		task, finished := s.manager.Next()
-		if finished {
-			break
-		}
-		s.manager.Report(task, s.impl.runOne(task))
-	}
-
-	return s.mergeReduceOutputFiles()
-}
-
-func (s *genericScheduler) mergeReduceOutputFiles() (string, error) {
-	files := make([]string, s.job.ReduceNum)
+func mergeReduceOutputFiles(job types.Job) (string, error) {
+	files := make([]string, job.ReduceNum)
 	defer func() {
 		for _, fileName := range files {
-			s.job.Storage.Remove(fileName)
+			job.Storage.Remove(fileName)
 		}
 	}()
 
 	var kvs []types.KeyValue
 
-	for i := 0; i < s.job.ReduceNum; i++ {
-		fileName := util.GenerateReduceOutputFileName(s.job.Name, i)
-		file, err := s.job.Storage.Open(fileName)
+	for i := 0; i < job.ReduceNum; i++ {
+		fileName := util.GenerateReduceOutputFileName(job.Name, i)
+		file, err := job.Storage.Open(fileName)
 		if err != nil {
 			return "", err
 		}
@@ -77,8 +47,8 @@ func (s *genericScheduler) mergeReduceOutputFiles() (string, error) {
 		return kvs[i].Key < kvs[j].Key
 	})
 
-	outputFileName := generateFinalOutputFileName(s.job.Name)
-	file, err := s.job.Storage.Create(outputFileName)
+	outputFileName := generateFinalOutputFileName(job.Name)
+	file, err := job.Storage.Create(outputFileName)
 	if err != nil {
 		return outputFileName, err
 	}
@@ -102,17 +72,29 @@ func newSequentialScheduler(
 	job types.Job,
 	manager taskManager,
 	executorFactory util.ExecutorFactory) scheduler {
-	s := &sequentialScheduler{
-		genericScheduler: newGenericScheduler(job, manager),
-		executorFactory:  executorFactory,
+	return &sequentialScheduler{
+		job:             job,
+		manager:         manager,
+		executorFactory: executorFactory,
 	}
-	s.impl = s
-	return s
 }
 
 type sequentialScheduler struct {
-	genericScheduler
+	job             types.Job
+	manager         taskManager
 	executorFactory util.ExecutorFactory
+}
+
+func (s *sequentialScheduler) Run() (string, error) {
+	for {
+		task, finished := s.manager.Next()
+		if finished {
+			break
+		}
+		s.manager.Report(task, s.runOne(task))
+	}
+
+	return mergeReduceOutputFiles(s.job)
 }
 
 func (s *sequentialScheduler) runOne(task types.Task) types.Result {
@@ -120,6 +102,7 @@ func (s *sequentialScheduler) runOne(task types.Task) types.Result {
 
 	switch task.Type {
 	case types.Map, types.Reduce:
+		glog.Infof("Start task: %s", task.Key())
 		result = s.execute(task)
 	default:
 		result = types.Result{Code: types.UnknownTask, Message: fmt.Sprintf("Unknown task type: %s", task.Type)}
@@ -130,4 +113,47 @@ func (s *sequentialScheduler) runOne(task types.Task) types.Result {
 
 func (s *sequentialScheduler) execute(task types.Task) types.Result {
 	return s.executorFactory.Executor(task, s.job).Run()
+}
+
+func newParallelScheduler(job types.Job, taskManager taskManager, workerManager workerManager) scheduler {
+	return &parallelScheduler{
+		job:           job,
+		taskManager:   taskManager,
+		workerManager: workerManager,
+	}
+}
+
+type parallelScheduler struct {
+	job           types.Job
+	taskManager   taskManager
+	workerManager workerManager
+}
+
+func (s *parallelScheduler) Run() (string, error) {
+	for {
+		task, finished := s.taskManager.Next()
+		if finished {
+			break
+		}
+		go s.taskManager.Report(task, s.runOne(task))
+	}
+	return mergeReduceOutputFiles(s.job)
+}
+
+func (s *parallelScheduler) runOne(task types.Task) types.Result {
+	worker, stopped := s.workerManager.Allocate()
+	if stopped {
+		return types.Result{Code: types.ExceptionErr, Message: "Master stopped unexpected"}
+	}
+	defer s.workerManager.Release(worker.name)
+
+	glog.V(3).Infof("Assign task %s to worker %s", task.Key(), worker.String())
+
+	result := types.Result{}
+	err := worker.Execute(&task, &result)
+	if err != nil {
+		result.Code = types.RpcCallErr
+		result.Message = fmt.Sprintf("Rpc call(Execute) failed: %v", err)
+	}
+	return result
 }

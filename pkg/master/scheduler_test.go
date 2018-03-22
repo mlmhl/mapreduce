@@ -68,8 +68,7 @@ func TestMergeReduceOutputFiles(t *testing.T) {
 		},
 	} {
 		prepare(&c)
-		scheduler := newGenericScheduler(c.job, nil)
-		outputFileName, err := scheduler.mergeReduceOutputFiles()
+		outputFileName, err := mergeReduceOutputFiles(c.job)
 		if err != nil {
 			t.Fatalf("Test case %s faild as merge error: %v", c.job.Name, err)
 		}

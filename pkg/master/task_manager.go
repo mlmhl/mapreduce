@@ -111,8 +111,6 @@ func (ts *tasksState) next() (types.Task, bool) {
 	delete(ts.tasks[types.Pending], task.Key())
 	ts.tasks[types.Running][task.Key()] = task
 
-	glog.Infof("Start task: %s", task.Key())
-
 	return task, false
 }
 
