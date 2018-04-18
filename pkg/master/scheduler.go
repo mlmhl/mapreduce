@@ -68,36 +68,63 @@ func generateFinalOutputFileName(jobName string) string {
 	return fmt.Sprintf("%s-%s", types.FinalOutputFIlePrefix, jobName)
 }
 
-func newSequentialScheduler(
-	job types.Job,
-	manager taskManager,
-	executorFactory util.ExecutorFactory) scheduler {
-	return &sequentialScheduler{
-		job:             job,
-		manager:         manager,
-		executorFactory: executorFactory,
+type schedulerImpl interface {
+	SupportParallel() bool
+	RunOne(task types.Task) types.Result
+}
+
+type genericScheduler struct {
+	job         types.Job
+	impl        schedulerImpl
+	taskManager taskManager
+}
+
+func newGenericScheduler(job types.Job, impl schedulerImpl, taskManager taskManager) genericScheduler {
+	return genericScheduler{
+		job:         job,
+		impl:        impl,
+		taskManager: taskManager,
 	}
 }
 
-type sequentialScheduler struct {
-	job             types.Job
-	manager         taskManager
-	executorFactory util.ExecutorFactory
-}
-
-func (s *sequentialScheduler) Run() (string, error) {
+func (s *genericScheduler) Run() (string, error) {
 	for {
-		task, finished := s.manager.Next()
+		task, finished := s.taskManager.Next()
 		if finished {
 			break
 		}
-		s.manager.Report(task, s.runOne(task))
+		f := func() {
+			s.taskManager.Report(task, s.impl.RunOne(task))
+		}
+		if s.impl.SupportParallel() {
+			go f()
+		} else {
+			f()
+		}
 	}
 
 	return mergeReduceOutputFiles(s.job)
 }
 
-func (s *sequentialScheduler) runOne(task types.Task) types.Result {
+func newSequentialScheduler(
+	job types.Job,
+	taskManager taskManager,
+	executorFactory util.ExecutorFactory) scheduler {
+	s := &sequentialScheduler{executorFactory: executorFactory}
+	s.genericScheduler = newGenericScheduler(job, s, taskManager)
+	return s
+}
+
+type sequentialScheduler struct {
+	genericScheduler
+	executorFactory util.ExecutorFactory
+}
+
+func (s *sequentialScheduler) SupportParallel() bool {
+	return false
+}
+
+func (s *sequentialScheduler) RunOne(task types.Task) types.Result {
 	var result types.Result
 
 	switch task.Type {
@@ -116,31 +143,23 @@ func (s *sequentialScheduler) execute(task types.Task) types.Result {
 }
 
 func newParallelScheduler(job types.Job, taskManager taskManager, workerManager workerManager) scheduler {
-	return &parallelScheduler{
-		job:           job,
-		taskManager:   taskManager,
+	s := &parallelScheduler{
 		workerManager: workerManager,
 	}
+	s.genericScheduler = newGenericScheduler(job, s, taskManager)
+	return s
 }
 
 type parallelScheduler struct {
-	job           types.Job
-	taskManager   taskManager
+	genericScheduler
 	workerManager workerManager
 }
 
-func (s *parallelScheduler) Run() (string, error) {
-	for {
-		task, finished := s.taskManager.Next()
-		if finished {
-			break
-		}
-		go s.taskManager.Report(task, s.runOne(task))
-	}
-	return mergeReduceOutputFiles(s.job)
+func (s *parallelScheduler) SupportParallel() bool {
+	return true
 }
 
-func (s *parallelScheduler) runOne(task types.Task) types.Result {
+func (s *parallelScheduler) RunOne(task types.Task) types.Result {
 	worker, stopped := s.workerManager.Allocate()
 	if stopped {
 		return types.Result{Code: types.ExceptionErr, Message: "Master stopped unexpected"}
