@@ -7,6 +7,8 @@ import (
 
 	"github.com/mlmhl/mapreduce/pkg/storage"
 	"github.com/mlmhl/mapreduce/pkg/types"
+
+	"github.com/golang/glog"
 )
 
 func NewExecutorFactory() ExecutorFactory {
@@ -126,7 +128,19 @@ func (r *reduceExecutor) Run() types.Result {
 		return types.Result{Code: types.FileIOErr, Message: err.Error()}
 	}
 
+	// Remove all intermediate files as this reduce task is already succeeded.
+	r.clearIntermediateFiles()
+
 	return types.SucceededResult
+}
+
+func (r *reduceExecutor) clearIntermediateFiles() {
+	for mapperIndex := 0; mapperIndex < r.job.MapNum; mapperIndex++ {
+		fileName := GenerateIntermediateFileName(r.job.Name, mapperIndex, r.task.Index)
+		if err := r.job.Storage.Remove(fileName); err != nil {
+			glog.Warningf("Remove intermediate file %s failed: %v", fileName, err)
+		}
+	}
 }
 
 func (r *reduceExecutor) mergeIntermediateFiles(reducerIndex int) (map[string][]string, error) {
@@ -134,7 +148,6 @@ func (r *reduceExecutor) mergeIntermediateFiles(reducerIndex int) (map[string][]
 	defer func() {
 		for _, file := range files {
 			file.Close()
-			r.job.Storage.Remove(file.Name())
 		}
 	}()
 	for mapperIndex := 0; mapperIndex < r.job.MapNum; mapperIndex++ {
