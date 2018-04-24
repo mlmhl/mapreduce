@@ -34,5 +34,6 @@ func (s *Server) Execute(task *types.Task, result *types.Result) error {
 
 func (s *Server) Shutdown(_ rpc.NopValue, _ *rpc.NopValue) error {
 	s.worker.shutdown()
-	return s.server.Stop()
+	s.server.Stop()
+	return nil
 }
