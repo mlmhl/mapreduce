@@ -27,7 +27,6 @@ else
 
     for ((i=0;i<${WORKER_NUM};i++))
     do
-        echo "start worker ${i}"
         nohup ./wc worker worker_${i} test \
         --root-dir=/Users/malin/Documents/code/Go/src/github.com/mlmhl/mapreduce/examples/word_count \
         --map-num=$# \
@@ -35,6 +34,7 @@ else
         --address=tcp:127.0.0.1:1234${i} \
         --master-address=tcp:127.0.0.1:12321 \
         -v=3 --logtostderr=true > worker_${i}.log 2>&1 &
+        echo "start worker ${i}"
     done
 
     tail -f master.log
