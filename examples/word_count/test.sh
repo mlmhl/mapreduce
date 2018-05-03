@@ -1,11 +1,13 @@
 #!/bin/bash
 
+export COMPILE_FLAGS=${COMPILE_FLAGS}
+
 export MODE=${MODE:-"sequential"}
 export REDUCE_NUM=${REDUCE_NUM:-5}
 export WORKER_NUM=${WORKER_NUM:-1}
 export WORKER_LIMIT=${WORKER_LIMIT:-1}
 
-go build -o wc main.go
+go build ${COMPILE_FLAGS} -o wc main.go
 
 if [ ${MODE} == "sequential" ]; then
     ./wc master test $@ \
